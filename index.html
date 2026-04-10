@@ -10,6 +10,7 @@ body {
   padding: 20px;
   background: #fafafa;
 }
+
 h1 { margin-bottom: 6px; }
 #status { margin-bottom: 20px; color: #555; }
 
@@ -54,6 +55,20 @@ iframe {
   margin-top: 8px;
   font-weight: bold;
 }
+
+/* 右固定ボタン */
+#jumpBtn {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  padding: 12px 16px;
+  border-radius: 999px;
+  border: none;
+  background: #000;
+  color: #fff;
+  cursor: pointer;
+  display: none;
+}
 </style>
 </head>
 
@@ -63,62 +78,88 @@ iframe {
 <div id="status">読み込み中…</div>
 <div id="videos"></div>
 
+<button id="jumpBtn">再生中へ</button>
+
 <script>
-/* ===== 設定 ===== */
 const API_KEY = "AIzaSyAxk1YpQSe-qDtFUSUmnjnduanag41Mlyk";
-const CHANNEL_ID = "UCqRV_ZIQhVKfxG1_WkNiRbg"; // Fラン就職チャンネル
+const CHANNEL_ID = "UCqRV_ZIQhVKfxG1_WkNiRbg";
+
+let currentVideoEl = null;
 
 /* ===== 共通 ===== */
 async function fetchJson(url) {
   const res = await fetch(url);
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  if (!res.ok) throw new Error(res.status);
   return res.json();
 }
 
-/* ===== アップロードリスト取得 ===== */
-async function getUploadsPlaylistId(channelId) {
+/* ===== playlist ===== */
+async function getUploadsPlaylistId() {
   const url =
-    `https://www.googleapis.com/youtube/v3/channels?part=contentDetails&id=${channelId}&key=${API_KEY}`;
+    `https://www.googleapis.com/youtube/v3/channels?part=contentDetails&id=${CHANNEL_ID}&key=${API_KEY}`;
   const data = await fetchJson(url);
   return data.items[0].contentDetails.relatedPlaylists.uploads;
 }
 
-/* ===== 動画一覧取得 ===== */
+/* ===== videos ===== */
 async function getAllVideos(playlistId) {
-  let videos = [];
-  let pageToken = "";
+  let out = [];
+  let token = "";
 
   while (true) {
     const url =
       `https://www.googleapis.com/youtube/v3/playlistItems` +
-      `?part=snippet&playlistId=${playlistId}` +
-      `&maxResults=50&key=${API_KEY}` +
-      (pageToken ? `&pageToken=${pageToken}` : "");
+      `?part=snippet&playlistId=${playlistId}&maxResults=50&key=${API_KEY}` +
+      (token ? `&pageToken=${token}` : "");
 
     const data = await fetchJson(url);
-
     if (!data.items) break;
-    videos.push(...data.items);
 
+    out.push(...data.items);
     if (!data.nextPageToken) break;
-    pageToken = data.nextPageToken;
+    token = data.nextPageToken;
   }
+  return out;
+}
 
-  return videos;
+/* ===== 描画（高速化） ===== */
+function renderVideos(videos) {
+  const container = document.getElementById("videos");
+  const fragment = document.createDocumentFragment();
+
+  videos.forEach(v => {
+    const snip = v.snippet;
+    if (!snip?.resourceId?.videoId) return;
+
+    const id = snip.resourceId.videoId;
+    const thumb =
+      snip.thumbnails?.high?.url ||
+      snip.thumbnails?.medium?.url ||
+      "";
+
+    const div = document.createElement("div");
+    div.className = "video";
+
+    div.innerHTML = `
+      <div class="thumb" data-id="${id}">
+        <img src="${thumb}" loading="lazy">
+        <div class="play">▶</div>
+      </div>
+      <div class="title">${snip.title}</div>
+    `;
+
+    fragment.appendChild(div);
+  });
+
+  container.appendChild(fragment);
 }
 
 /* ===== メイン ===== */
 async function main() {
   try {
-    const playlistId = await getUploadsPlaylistId(CHANNEL_ID);
-    const videos = await getAllVideos(playlistId);
+    const playlistId = await getUploadsPlaylistId();
+    let videos = await getAllVideos(playlistId);
 
-    if (!videos.length) {
-      document.getElementById("status").innerText = "動画が取得できません";
-      return;
-    }
-
-    /* 新しい順に並び替え */
     videos.sort((a, b) =>
       new Date(b.snippet.publishedAt) - new Date(a.snippet.publishedAt)
     );
@@ -126,54 +167,42 @@ async function main() {
     document.getElementById("status").innerText =
       `動画数：${videos.length}`;
 
-    const container = document.getElementById("videos");
+    renderVideos(videos);
 
-    videos.forEach(v => {
-      const snip = v.snippet;
-      if (!snip?.resourceId?.videoId) return;
-
-      const id = snip.resourceId.videoId;
-      const title = snip.title;
-
-      const thumb =
-        snip.thumbnails?.high?.url ||
-        snip.thumbnails?.medium?.url ||
-        snip.thumbnails?.default?.url ||
-        "";
-
-      container.insertAdjacentHTML("beforeend", `
-        <div class="video">
-          <div class="thumb" data-id="${id}">
-            <img src="${thumb}" alt="">
-            <div class="play">▶</div>
-          </div>
-          <div class="title">${title}</div>
-        </div>
-      `);
-    });
-
-    /* クリックで再生 */
-    container.addEventListener("click", e => {
-      const box = e.target.closest(".thumb");
-      if (!box) return;
-
-      const id = box.dataset.id;
-
-      box.outerHTML = `
-        <iframe
-          src="https://www.youtube-nocookie.com/embed/${id}?autoplay=1"
-          allow="autoplay; encrypted-media; picture-in-picture"
-          allowfullscreen>
-        </iframe>
-      `;
-    });
-
-  } catch (err) {
-    console.error(err);
-    document.getElementById("status").innerText =
-      "読み込み失敗（APIキー制限 or quota超過）";
+  } catch (e) {
+    document.getElementById("status").innerText = "取得失敗";
   }
 }
+
+/* ===== 再生処理 ===== */
+document.getElementById("videos").addEventListener("click", e => {
+  const box = e.target.closest(".thumb");
+  if (!box) return;
+
+  const id = box.dataset.id;
+
+  const wrapper = box.closest(".video");
+
+  wrapper.querySelector(".thumb").outerHTML = `
+    <iframe src="https://www.youtube-nocookie.com/embed/${id}?autoplay=1"
+      allow="autoplay; encrypted-media" allowfullscreen>
+    </iframe>
+  `;
+
+  currentVideoEl = wrapper;
+
+  document.getElementById("jumpBtn").style.display = "block";
+});
+
+/* ===== ジャンプボタン ===== */
+document.getElementById("jumpBtn").addEventListener("click", () => {
+  if (!currentVideoEl) return;
+
+  currentVideoEl.scrollIntoView({
+    behavior: "smooth",
+    block: "center"
+  });
+});
 
 main();
 </script>
