@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8" />
-  <title>思想、考え/title>
+  <title>思想と考え - Playlist Viewer</title>
   <style>
     :root {
       --player-width: 45%;
@@ -124,7 +124,13 @@
       flex-direction: column;
       max-height: 100vh;
     }
-    h2 { margin: 0 0 15px 0; text-align: center; font-size: 25px; }
+    h2 { 
+      margin: 0 0 15px 0; 
+      text-align: center; 
+      font-size: 28px; 
+      font-weight: bold;
+      color: #1f1f1f;
+    }
     #videos-wrapper {
       flex: 1;
       overflow-y: auto;
@@ -202,7 +208,7 @@
     </div>
     <div id="resize-bar"></div>
     <div id="thumbnail-area">
-      <h2>Frann Playlist Viewer</h2>
+      <h2>思想と考え</h2>
       <div id="videos-wrapper">
         <div id="videos"></div>
         <div id="loading">全動画を読み込み中...</div>
@@ -215,11 +221,9 @@
   </div>
 
 <script>
-  // === 設定（最初のビューアーから抽出したプレイリストIDに変更済み）===
   const apiKey = "AIzaSyAxk1YpQSe-qDtFUSUmnjnduanag41Mlyk";
-  const playlistId = "PLExT6MVBKs2BOFn2KPX6FYLQ8btIpOZ5l";   // ← ここを変更
+  const playlistId = "PLExT6MVBKs2BOFn2KPX6FYLQ8btIpOZ5l";
 
-  // === DOM ===
   const sidebar = document.getElementById("sidebar");
   const toggleHistoryBtn = document.getElementById("toggleHistoryBtn");
   const clearHistoryBtn = document.getElementById("clearHistoryBtn");
@@ -239,7 +243,6 @@
   let currentVideoEl = null;
   let isHistoryOpen = false;
 
-  // ====================== 履歴機能 ======================
   function loadHistory() { return JSON.parse(localStorage.getItem("frann_history") || "[]"); }
   function saveHistory(video) {
     let history = loadHistory();
@@ -274,7 +277,6 @@
     toggleHistoryBtn.textContent = isHistoryOpen ? "‹" : "›";
   }
 
-  // ====================== 動画再生 ======================
   function playVideo(videoId, title, videoItemElement) {
     player.innerHTML = `<iframe src="https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&rel=0&modestbranding=1" allow="autoplay; encrypted-media" allowfullscreen></iframe>`;
     if (currentActive) currentActive.classList.remove("active");
@@ -284,7 +286,6 @@
     saveHistory({ id: videoId, title });
   }
 
-  // ====================== YouTube API ======================
   async function fetchAllVideos() {
     let items = [];
     let pageToken = "";
@@ -326,7 +327,6 @@
     loadingEl.style.display = "none";
   }
 
-  // ====================== リサイズ機能 ======================
   let isResizingHorizontal = false;
   let isResizingVertical = false;
   function initResize() {
@@ -378,13 +378,11 @@
     });
   }
 
-  // ====================== ボタン ======================
   function initButtons() {
     jumpBtn.onclick = () => currentVideoEl?.scrollIntoView({ behavior: "smooth", block: "center" });
     topBtn.onclick = () => videosWrapper.scrollTo({ top: 0, behavior: "smooth" });
   }
 
-  // ====================== メイン ======================
   async function main() {
     try {
       loadingEl.textContent = "全動画を読み込み中...";
@@ -397,7 +395,6 @@
     }
   }
 
-  // 初期化
   toggleHistoryBtn.addEventListener("click", toggleHistory);
   clearHistoryBtn.addEventListener("click", clearHistory);
   initResize();
