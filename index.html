@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8" />
-  <title>思想と考え - Playlist Viewer</title>
+  <title>スキル思考法、思想 - Playlist Viewer</title>
   <style>
     :root {
       --player-width: 45%;
@@ -124,13 +124,7 @@
       flex-direction: column;
       max-height: 100vh;
     }
-    h2 { 
-      margin: 0 0 15px 0; 
-      text-align: center; 
-      font-size: 28px; 
-      font-weight: bold;
-      color: #1f1f1f;
-    }
+    h2 { margin: 0 0 15px 0; text-align: center; font-size: 28px; font-weight: bold; }
     #videos-wrapper {
       flex: 1;
       overflow-y: auto;
@@ -146,6 +140,8 @@
       border-radius: 12px;
       overflow: hidden;
       box-shadow: 0 3px 12px rgba(0,0,0,0.1);
+      transition: transform 0.2s;
+      position: relative;
     }
     .video-item:hover { transform: translateY(-4px); }
     .thumbnail { position: relative; cursor: pointer; }
@@ -165,6 +161,41 @@
       font-size: 32px;
     }
     .play-btn:hover { background: #ff0000; }
+    /* タイトル部分 */
+    .video-title {
+      padding: 10px 8px 12px 12px;
+      font-size: 14px;
+      line-height: 1.3;
+      display: -webkit-box;
+      -webkit-line-clamp: 3;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+      position: relative;
+      padding-right: 70px;
+    }
+    .copy-btn {
+      position: absolute;
+      top: 50%;
+      right: 12px;
+      transform: translateY(-50%);
+      background: rgba(0,0,0,0.85);
+      color: white;
+      border: none;
+      padding: 4px 9px;
+      font-size: 11px;
+      border-radius: 4px;
+      cursor: pointer;
+      z-index: 25;
+      opacity: 0;
+      transition: all 0.2s;
+      white-space: nowrap;
+    }
+    .video-item:hover .copy-btn {
+      opacity: 1;
+    }
+    .copy-btn:hover {
+      background: #ff0000;
+    }
     .active {
       outline: 4px solid #ff0000;
       outline-offset: -4px;
@@ -208,10 +239,10 @@
     </div>
     <div id="resize-bar"></div>
     <div id="thumbnail-area">
-      <h2>思想と考え</h2>
+      <h2>スキル思考法、思想</h2>
       <div id="videos-wrapper">
         <div id="videos"></div>
-        <div id="loading">全動画を読み込み中...</div>
+        <div id="loading">全動画を読み込み中...（高速化版）</div>
       </div>
     </div>
   </div>
@@ -221,9 +252,12 @@
   </div>
 
 <script>
+  // === 設定 ===
   const apiKey = "AIzaSyAxk1YpQSe-qDtFUSUmnjnduanag41Mlyk";
-  const playlistId = "PLExT6MVBKs2BOFn2KPX6FYLQ8btIpOZ5l";
+  const playlistId = "PLExT6MVBKs2BOFn2KPX6FYLQ8btIpOZ5l";   // スキル思考法、思想
+  const historyKey = "frann_history_スキル思考法思想";
 
+  // === DOM ===
   const sidebar = document.getElementById("sidebar");
   const toggleHistoryBtn = document.getElementById("toggleHistoryBtn");
   const clearHistoryBtn = document.getElementById("clearHistoryBtn");
@@ -243,13 +277,14 @@
   let currentVideoEl = null;
   let isHistoryOpen = false;
 
-  function loadHistory() { return JSON.parse(localStorage.getItem("frann_history") || "[]"); }
+  // ====================== 履歴機能 ======================
+  function loadHistory() { return JSON.parse(localStorage.getItem(historyKey) || "[]"); }
   function saveHistory(video) {
     let history = loadHistory();
     history = history.filter(item => item.id !== video.id);
     history.unshift(video);
     history = history.slice(0, 30);
-    localStorage.setItem("frann_history", JSON.stringify(history));
+    localStorage.setItem(historyKey, JSON.stringify(history));
     renderHistory();
   }
   function renderHistory() {
@@ -266,8 +301,8 @@
     });
   }
   function clearHistory() {
-    if (confirm("再生履歴をすべて削除しますか？")) {
-      localStorage.removeItem("frann_history");
+    if (confirm("スキル思考法、思想プレイリストの再生履歴をすべて削除しますか？")) {
+      localStorage.removeItem(historyKey);
       renderHistory();
     }
   }
@@ -277,6 +312,7 @@
     toggleHistoryBtn.textContent = isHistoryOpen ? "‹" : "›";
   }
 
+  // ====================== 動画再生 ======================
   function playVideo(videoId, title, videoItemElement) {
     player.innerHTML = `<iframe src="https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&rel=0&modestbranding=1" allow="autoplay; encrypted-media" allowfullscreen></iframe>`;
     if (currentActive) currentActive.classList.remove("active");
@@ -286,16 +322,38 @@
     saveHistory({ id: videoId, title });
   }
 
+  // ====================== リンクコピー機能 ======================
+  function copyLink(videoId) {
+    const url = `https://www.youtube.com/watch?v=${videoId}`;
+    navigator.clipboard.writeText(url).then(() => {
+      const btn = event.currentTarget;
+      const originalText = btn.textContent;
+      btn.textContent = "✓ コピー";
+      btn.style.background = "#4caf50";
+      setTimeout(() => {
+        btn.textContent = originalText;
+        btn.style.background = "rgba(0,0,0,0.85)";
+      }, 1600);
+    });
+  }
+
+  // ====================== YouTube API ======================
   async function fetchAllVideos() {
     let items = [];
     let pageToken = "";
+    let pageCount = 0;
+    const maxPages = 20;
+    loadingEl.textContent = "動画を高速取得中...";
     do {
       const url = `https://www.googleapis.com/youtube/v3/playlistItems?part=snippet&maxResults=50&playlistId=${playlistId}&key=${apiKey}&pageToken=${pageToken}`;
       const res = await fetch(url);
+      if (!res.ok) throw new Error(`APIエラー: ${res.status}`);
       const data = await res.json();
       if (data.items) items = items.concat(data.items);
       pageToken = data.nextPageToken;
-    } while (pageToken);
+      pageCount++;
+      loadingEl.textContent = `取得中... ${items.length}本 (${pageCount}ページ)`;
+    } while (pageToken && pageCount < maxPages);
     return items;
   }
 
@@ -312,14 +370,22 @@
       div.dataset.id = videoId;
       div.innerHTML = `
         <div class="thumbnail">
-          <img src="${thumbnail}" loading="lazy">
+          <img src="${thumbnail}" loading="lazy" alt="${title}">
           <div class="play-btn">▶</div>
         </div>
-        <p>${title}</p>
+        <div class="video-title">
+          ${title}
+          <button class="copy-btn">🔗</button>
+        </div>
       `;
-      div.querySelector('.play-btn').onclick = (e) => {
+      div.onclick = (e) => {
+        if (!e.target.classList.contains('copy-btn')) {
+          playVideo(videoId, title, div);
+        }
+      };
+      div.querySelector('.copy-btn').onclick = (e) => {
         e.stopPropagation();
-        playVideo(videoId, title, div);
+        copyLink(videoId);
       };
       fragment.appendChild(div);
     });
@@ -327,6 +393,7 @@
     loadingEl.style.display = "none";
   }
 
+  // ====================== リサイズ機能 ======================
   let isResizingHorizontal = false;
   let isResizingVertical = false;
   function initResize() {
@@ -339,14 +406,12 @@
     };
     resizeBar.addEventListener("mousedown", startHorizontal);
     playerHorizontalHandle.addEventListener("mousedown", startHorizontal);
-
     verticalResizeBar.addEventListener("mousedown", (e) => {
       isResizingVertical = true;
       verticalResizeBar.classList.add("active");
       document.body.style.cursor = "row-resize";
       e.preventDefault();
     });
-
     document.addEventListener("mousemove", (e) => {
       if (isResizingHorizontal) {
         const mainRect = document.getElementById("main").getBoundingClientRect();
@@ -362,7 +427,6 @@
         document.documentElement.style.setProperty("--player-height", newHeightVh + "vh");
       }
     });
-
     document.addEventListener("mouseup", () => {
       if (isResizingHorizontal) {
         isResizingHorizontal = false;
@@ -385,16 +449,17 @@
 
   async function main() {
     try {
-      loadingEl.textContent = "全動画を読み込み中...";
       const allItems = await fetchAllVideos();
       renderAllVideos(allItems);
       renderHistory();
     } catch (err) {
-      videosContainer.innerHTML = `<p style="color:red; padding:20px;">エラー: ${err.message}</p>`;
+      console.error(err);
+      videosContainer.innerHTML = `<p style="color:red; padding:20px;">読み込みエラー: ${err.message}<br>APIキーが無効か、制限を超えています。</p>`;
       loadingEl.style.display = "none";
     }
   }
 
+  // 初期化
   toggleHistoryBtn.addEventListener("click", toggleHistory);
   clearHistoryBtn.addEventListener("click", clearHistory);
   initResize();
